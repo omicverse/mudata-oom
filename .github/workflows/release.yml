@@ -29,10 +29,6 @@ jobs:
         python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Clone sibling Rust repos
-        run: |
-          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
-          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -42,6 +38,13 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --features extension-module -i python${{ matrix.python }}
           manylinux: 2_17
+          # Sibling Rust crates must be cloned INSIDE the manylinux
+          # container — host-side checkouts at `../mudata-rs/` are not
+          # mounted. yum lives in CentOS 7-based manylinux2_17.
+          before-script-linux: |
+            yum install -y git
+            cd /io && git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
+            cd /io && git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}-py${{ matrix.python }}
@@ -72,32 +75,14 @@ jobs:
           name: wheels-macos-${{ matrix.target }}-py${{ matrix.python }}
           path: target/wheels/*.whl
 
-  windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        target: [x64]
-        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Clone sibling Rust repos
-        shell: bash
-        run: |
-          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
-          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-          architecture: ${{ matrix.target }}
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --features extension-module -i python${{ matrix.python }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows-${{ matrix.target }}-py${{ matrix.python }}
-          path: target/wheels/*.whl
+  # Windows is intentionally NOT built for v0.x. The upstream
+  # anndata-rs hdf5-metno-sys feature set (`["static", "zlib",
+  # "threadsafe"]`) hits a CMake-level conflict on MSVC ("thread-safety
+  # option not supported with static library"). Fixing it would
+  # require maintaining a forked anndata-rs Cargo.toml. Mac+Linux
+  # cover the vast majority of users; Windows can be revisited when
+  # upstream relaxes the feature combination, or when we choose to
+  # fork.
 
   sdist:
     runs-on: ubuntu-latest
@@ -122,7 +107,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    needs: [linux, macos, windows, sdist]
+    needs: [linux, macos, sdist]
     runs-on: ubuntu-latest
     environment:
       name: pypi
