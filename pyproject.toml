@@ -9,7 +9,7 @@ module-name = "mudataoom._backend"
 
 [project]
 name = "mudataoom"
-version = "0.2.0"
+version = "0.3.0"
 description = "Out-of-memory MuData — drop-in replacement for mudata.MuData built on mudata-rs and anndataoom"
 readme = "README.md"
 license = { file = "LICENSE" }

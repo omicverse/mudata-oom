@@ -365,6 +365,178 @@ class MuDataOOM:
         return list(self.uns.keys())
 
     # ------------------------------------------------------------------
+    # Column vector accessors
+    # ------------------------------------------------------------------
+    def obs_vector(self, key: str, layer: str | None = None) -> np.ndarray:
+        from ._ops import axis_vector_
+
+        return axis_vector_(self, key, "obs", layer)
+
+    def var_vector(self, key: str, layer: str | None = None) -> np.ndarray:
+        from ._ops import axis_vector_
+
+        return axis_vector_(self, key, "var", layer)
+
+    # ------------------------------------------------------------------
+    # Joint table sync (mudata 0.3-style update + 0.4-style pull/push)
+    # ------------------------------------------------------------------
+    def update_obs(self) -> None:
+        """Rebuild joint ``.obs`` from per-modality ``.obs`` tables."""
+        from ._ops import update_obs_
+
+        update_obs_(self)
+
+    def update_var(self) -> None:
+        """Rebuild joint ``.var`` from per-modality ``.var`` tables."""
+        from ._ops import update_var_
+
+        update_var_(self)
+
+    def update(self) -> None:
+        """Rebuild both joint ``.obs`` and ``.var``."""
+        from ._ops import update_
+
+        update_(self)
+
+    def pull_obs(
+        self,
+        columns: list[str] | None = None,
+        mods: list[str] | None = None,
+        drop: bool = False,
+        only_drop: bool = False,
+        **_legacy,
+    ) -> None:
+        """Copy per-modality obs columns up to the joint obs.
+
+        Simplified relative to upstream's ``pull_obs`` (mudata 0.4):
+        the ``common`` / ``nonunique`` / ``unique`` categorisation
+        knobs are silently ignored — every selected column is lifted
+        with a ``"<mod>:"`` prefix. Tracked as a follow-up.
+        """
+        from ._ops import pull_axis_
+
+        pull_axis_(self, "obs", columns, mods, drop, only_drop)
+
+    def pull_var(
+        self,
+        columns: list[str] | None = None,
+        mods: list[str] | None = None,
+        drop: bool = False,
+        only_drop: bool = False,
+        **_legacy,
+    ) -> None:
+        from ._ops import pull_axis_
+
+        pull_axis_(self, "var", columns, mods, drop, only_drop)
+
+    def push_obs(
+        self,
+        columns: list[str] | None = None,
+        mods: list[str] | None = None,
+        drop: bool = False,
+        only_drop: bool = False,
+        **_legacy,
+    ) -> None:
+        """Copy joint obs columns down into per-modality obs.
+
+        ``"<mod>:<key>"`` joint columns route to that modality's
+        ``<key>``; unprefixed joint columns broadcast to all target
+        modalities (lookup by the modality's own index).
+        """
+        from ._ops import push_axis_
+
+        push_axis_(self, "obs", columns, mods, drop, only_drop)
+
+    def push_var(
+        self,
+        columns: list[str] | None = None,
+        mods: list[str] | None = None,
+        drop: bool = False,
+        only_drop: bool = False,
+        **_legacy,
+    ) -> None:
+        from ._ops import push_axis_
+
+        push_axis_(self, "var", columns, mods, drop, only_drop)
+
+    # ------------------------------------------------------------------
+    # Name + dtype hygiene
+    # ------------------------------------------------------------------
+    def obs_names_make_unique(self) -> None:
+        """Make per-modality ``obs_names`` unique; rebuild joint axis."""
+        for ad in self._mods.values():
+            mk = getattr(ad, "obs_names_make_unique", None)
+            if callable(mk):
+                mk()
+        if self._rs is None:
+            self._recompute_in_memory_dims()
+
+    def var_names_make_unique(self) -> None:
+        for ad in self._mods.values():
+            mk = getattr(ad, "var_names_make_unique", None)
+            if callable(mk):
+                mk()
+        if self._rs is None:
+            self._recompute_in_memory_dims()
+
+    def strings_to_categoricals(
+        self, df: pd.DataFrame | None = None
+    ) -> pd.DataFrame | None:
+        """Convert object-dtype columns to pandas categoricals.
+
+        With an explicit ``df``: mutate + return that frame.
+        Without: apply to joint ``.obs`` / ``.var`` plus every
+        modality's ``.obs`` / ``.var``.
+        """
+        from ._ops import strings_to_categoricals_
+
+        if df is not None:
+            return strings_to_categoricals_(df)
+        strings_to_categoricals_(self._joint.obs)
+        strings_to_categoricals_(self._joint.var)
+        for ad in self._mods.values():
+            strings_to_categoricals_(getattr(ad, "obs", None))
+            strings_to_categoricals_(getattr(ad, "var", None))
+        return None
+
+    # ------------------------------------------------------------------
+    # Collapse / copy
+    # ------------------------------------------------------------------
+    def to_anndata(self, **_kwargs) -> Any:
+        """Collapse to a single :class:`anndata.AnnData`.
+
+        ``X`` is materialised in memory — not advisable for atlas-scale
+        objects. See :func:`mudataoom._ops.to_anndata_` for details
+        and current limitations (axis=0 only).
+        """
+        from ._ops import to_anndata_
+
+        return to_anndata_(self)
+
+    def copy(self, filename: str | os.PathLike | None = None) -> "MuDataOOM":
+        """Return a fresh :class:`MuDataOOM` with copied state.
+
+        Per-modality ``X`` is *not* re-written: the backing AnnDataOOM
+        objects are reused (they're already file-backed). The joint
+        DataFrames/dicts are deep-copied. If ``filename`` is given,
+        :meth:`write_h5mu` is called and the result re-opened.
+        """
+        if filename is not None:
+            self.write_h5mu(filename)
+            return read_h5mu(filename)
+        new = MuDataOOM(dict(self._mods), axis=self.axis)
+        if not self._joint.obs.empty:
+            new._joint.obs = self._joint.obs.copy()
+        if not self._joint.var.empty:
+            new._joint.var = self._joint.var.copy()
+        for src_name in ("obsm", "varm", "obsp", "varp", "obsmap", "varmap", "uns"):
+            if src_name in self._joint._loaded:
+                src = getattr(self._joint, src_name)
+                if src:
+                    setattr(new._joint, src_name, dict(src))
+        return new
+
+    # ------------------------------------------------------------------
     # Container protocol
     # ------------------------------------------------------------------
     def __len__(self) -> int:
