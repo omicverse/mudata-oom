@@ -40,11 +40,14 @@ jobs:
           manylinux: 2_17
           # Sibling Rust crates must be cloned INSIDE the manylinux
           # container — host-side checkouts at `../mudata-rs/` are not
-          # mounted. yum lives in CentOS 7-based manylinux2_17.
+          # mounted. maturin-action bind-mounts $GITHUB_WORKSPACE at
+          # the original path, so we clone siblings next to it via
+          # absolute paths. yum is the package manager in the CentOS
+          # 7-based manylinux2_17 image.
           before-script-linux: |
             yum install -y git
-            cd /io && git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
-            cd /io && git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
+            git clone --depth 1 https://github.com/omicverse/mudata-rs.git "$GITHUB_WORKSPACE/../mudata-rs"
+            git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git "$GITHUB_WORKSPACE/../anndata-rs"
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}-py${{ matrix.python }}
