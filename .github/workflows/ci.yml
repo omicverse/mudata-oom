@@ -49,8 +49,11 @@ jobs:
             target
           key: ${{ runner.os }}-py${{ matrix.python }}-cargo-${{ hashFiles('**/Cargo.toml') }}
 
-      - name: Build wheel + install in dev mode
-        run: maturin develop --release --features extension-module
+      - name: Build wheel
+        run: maturin build --release --features extension-module -i python${{ matrix.python }} --out dist
+
+      - name: Install built wheel
+        run: pip install --force-reinstall --no-deps dist/*.whl
 
       - name: pytest
         run: pytest tests/ -v
