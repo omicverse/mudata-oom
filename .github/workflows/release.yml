@@ -1,0 +1,139 @@
+name: release
+
+# Triggered when a vX.Y.Z tag is pushed. Builds wheels for the
+# Linux/macOS/Windows × py3.9..3.13 matrix and uploads them to PyPI
+# via OIDC-based "trusted publishing" — no API token in repo secrets.
+#
+# Before the first release, configure pypi.org → Manage → Publishing →
+# "Trusted publishers" with:
+#   PyPI Project Name:  mudataoom
+#   Owner:              omicverse
+#   Repository name:    mudata-oom
+#   Workflow filename:  release.yml
+#   Environment name:   pypi
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone sibling Rust repos
+        run: |
+          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
+          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --features extension-module -i python${{ matrix.python }}
+          manylinux: 2_17
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}-py${{ matrix.python }}
+          path: target/wheels/*.whl
+
+  macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [aarch64, x86_64]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone sibling Rust repos
+        run: |
+          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
+          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --features extension-module -i python${{ matrix.python }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}-py${{ matrix.python }}
+          path: target/wheels/*.whl
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [x64]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone sibling Rust repos
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
+          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.target }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --features extension-module -i python${{ matrix.python }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}-py${{ matrix.python }}
+          path: target/wheels/*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone sibling Rust repos
+        run: |
+          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
+          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist/*.tar.gz
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [linux, macos, windows, sdist]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mudataoom/
+    permissions:
+      id-token: write  # OIDC trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

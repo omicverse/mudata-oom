@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: build wheel + pytest (${{ matrix.os }} / py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      # mudataoom depends on sibling mudata-rs + anndata-rs source
+      # trees (Cargo workspace deps via path = "../..."). CI clones
+      # both before invoking maturin.
+      - name: Clone sibling Rust repos
+        run: |
+          git clone --depth 1 https://github.com/omicverse/mudata-rs.git ../mudata-rs
+          git clone --depth 1 https://github.com/Starlitnightly/anndata-rs.git ../anndata-rs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin pytest anndata anndataoom mudata h5py numpy pandas scipy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-py${{ matrix.python }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Build wheel + install in dev mode
+        run: maturin develop --release --features extension-module
+
+      - name: pytest
+        run: pytest tests/ -v

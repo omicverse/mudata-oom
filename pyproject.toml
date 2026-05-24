@@ -1,0 +1,50 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["extension-module"]
+python-source = "python"
+module-name = "mudataoom._backend"
+
+[project]
+name = "mudataoom"
+version = "0.1.0"
+description = "Out-of-memory MuData — drop-in replacement for mudata.MuData built on mudata-rs and anndataoom"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "omicverse contributors" },
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+keywords = ["mudata", "anndata", "multimodal", "single-cell", "out-of-memory", "rust"]
+
+dependencies = [
+    "anndata>=0.8.0",
+    "anndataoom>=0.1.4",
+    "numpy>=1.24",
+    "pandas>=1.5",
+    "scipy>=1.4",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "pytest-xdist", "mudata>=0.3.0", "h5py>=3.0"]
+
+[project.urls]
+Homepage = "https://github.com/Starlitnightly/mudata-oom"
+Repository = "https://github.com/Starlitnightly/mudata-oom"
+Issues = "https://github.com/Starlitnightly/mudata-oom/issues"

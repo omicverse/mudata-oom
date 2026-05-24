@@ -1,0 +1,24 @@
+[package]
+name = "mudataoom"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+authors = ["omicverse contributors"]
+description = "Out-of-memory MuData — Rust extension for the mudataoom Python package"
+license = "MIT"
+repository = "https://github.com/Starlitnightly/mudata-oom"
+readme = "README.md"
+
+[lib]
+name = "_backend"
+crate-type = ["cdylib"]
+
+[features]
+extension-module = ["pyo3/extension-module", "pymudata/extension-module"]
+
+[dependencies]
+# Sibling Rust source-of-truth — the mudata-rs workspace lives next
+# to this directory in omicverse_dev/. `pymudata` exposes PyO3-wrapped
+# types and a `register()` helper we plug into the `_backend` module.
+pymudata = { path = "../mudata-rs/pymudata" }
+pyo3 = { version = "0.27", features = ["multiple-pymethods"] }
